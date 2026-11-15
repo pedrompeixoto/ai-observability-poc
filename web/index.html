@@ -1,0 +1,582 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Claude Code Live</title>
+  <style>
+    :root {
+      --bg: #0a0c10; --panel: #11141a; --panel-2: #161a22; --line: #222834;
+      --text: #e6e9ef; --muted: #7d8597; --dim: #4b5263;
+      --violet: #a78bfa; --blue: #60a5fa; --teal: #2dd4bf; --green: #34d399;
+      --amber: #fbbf24; --red: #f87171; --slate: #94a3b8; --pink: #f472b6; --orange: #fb923c;
+      --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; background: var(--bg); color: var(--text);
+      font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", sans-serif;
+    }
+    .wrap { max-width: 1440px; margin: 0 auto; padding: 20px 16px 60px; }
+
+    /* header */
+    header { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+    .logo {
+      width: 34px; height: 34px; border-radius: 9px; display: grid; place-items: center;
+      background: linear-gradient(135deg, #d97757, #a78bfa); font-weight: 800; color: #0a0c10;
+    }
+    h1 { font-size: 17px; margin: 0; letter-spacing: .2px; }
+    .status { display: flex; align-items: center; gap: 7px; color: var(--muted); font-size: 12px; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--dim); flex: none; }
+    .live .dot, .dot.live { background: var(--green); box-shadow: 0 0 0 0 rgba(52,211,153,.6); animation: pulse 1.8s infinite; }
+    .down .dot { background: var(--red); }
+    @keyframes pulse { 70% { box-shadow: 0 0 0 7px rgba(52,211,153,0); } 100% { box-shadow: 0 0 0 0 rgba(52,211,153,0); } }
+    .spacer { flex: 1; }
+    button {
+      background: var(--panel-2); color: var(--text); border: 1px solid var(--line);
+      border-radius: 8px; padding: 6px 12px; font: inherit; font-size: 12px; cursor: pointer;
+    }
+    button:hover { border-color: #374050; }
+    button.on { background: var(--amber); color: #111; border-color: var(--amber); }
+
+    /* stats */
+    .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin: 18px 0 12px; }
+    .stat { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; }
+    .stat .k { font-size: 11px; text-transform: uppercase; letter-spacing: .8px; color: var(--muted); }
+    .stat .v { font: 600 22px/1.2 var(--mono); margin-top: 4px; font-variant-numeric: tabular-nums; }
+    .stat .s { font-size: 11px; color: var(--muted); margin-top: 2px; font-family: var(--mono); }
+
+    /* activity sparkline */
+    .activity { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px 8px; }
+    .activity .k { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .8px; }
+    .bars { display: flex; align-items: flex-end; gap: 2px; height: 38px; margin-top: 6px; }
+    .bars i { flex: 1; min-height: 2px; background: #273042; border-radius: 2px 2px 0 0; transition: height .3s; }
+    .bars i.hot { background: linear-gradient(to top, #5b4bd1, var(--violet)); }
+
+    /* two-column body */
+    .main { display: grid; grid-template-columns: 400px minmax(0, 1fr); gap: 18px; margin-top: 16px; align-items: start; }
+
+    /* sessions / agents panel */
+    .side { position: sticky; top: 12px; max-height: calc(100vh - 24px); overflow: auto; }
+    .side-h { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; min-height: 28px; }
+    .side-h .k { font-size: 11px; text-transform: uppercase; letter-spacing: .8px; color: var(--muted); }
+    .side-h button { padding: 3px 9px; font-size: 11px; }
+    .sess-card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; margin-bottom: 10px; }
+    .sess-card.sel { border-color: var(--violet); box-shadow: 0 0 0 1px var(--violet) inset; }
+    .sess-top { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+    .sess-id { font: 600 13px var(--mono); }
+    .sess-term { font-size: 11px; color: var(--muted); }
+    .sess-ago { margin-left: auto; font: 11px var(--mono); color: var(--muted); white-space: nowrap; }
+    .sess-metrics { display: flex; flex-wrap: wrap; gap: 4px 12px; margin: 8px 0 6px; font: 11.5px var(--mono); color: var(--muted); }
+    .sess-metrics b { color: var(--text); font-weight: 600; }
+    .agents { border-top: 1px dashed var(--line); padding-top: 6px; display: grid; gap: 2px; }
+    .agent { display: grid; grid-template-columns: minmax(0, 1fr) 48px 160px; align-items: center; gap: 10px;
+      padding: 5px 6px; border-radius: 7px; cursor: pointer; font: 12px var(--mono); }
+    .agent:hover { background: var(--panel-2); }
+    .agent.sel { background: rgba(167,139,250,.14); }
+    .agent .an { display: flex; align-items: center; gap: 6px; min-width: 0; }
+    .agent .an span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .agent .glyph { color: var(--ac); flex: none; }
+    .agent .aid { color: var(--dim); font-size: 10.5px; }
+    .agent .done { color: var(--green); font-size: 10.5px; }
+    .share { height: 5px; background: #1d2330; border-radius: 3px; overflow: hidden; }
+    .share i { display: block; height: 100%; background: var(--ac); border-radius: 3px; }
+    .agent .am { color: var(--muted); font-size: 11px; white-space: nowrap; text-align: right; }
+    .agent .am b { color: var(--text); font-weight: 500; }
+    .side-empty { color: var(--dim); font-size: 12px; padding: 14px; border: 1px dashed var(--line); border-radius: 12px; text-align: center; }
+
+    /* filter chips */
+    .chips { display: flex; gap: 6px; flex-wrap: wrap; margin: 0 0 10px; min-height: 28px; }
+    .chip {
+      display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px;
+      background: var(--panel); border: 1px solid var(--line); font-size: 12px; cursor: pointer; user-select: none;
+    }
+    .chip .c { width: 7px; height: 7px; border-radius: 50%; }
+    .chip .n { color: var(--muted); font-family: var(--mono); font-size: 11px; }
+    .chip.off { opacity: .35; }
+    .focus-banner { display: none; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); margin-bottom: 10px;
+      background: rgba(167,139,250,.08); border: 1px solid rgba(167,139,250,.3); border-radius: 8px; padding: 6px 10px; }
+    .focus-banner.on { display: flex; }
+    .focus-banner b { color: var(--violet); font-family: var(--mono); font-weight: 600; }
+    .focus-banner button { margin-left: auto; padding: 2px 8px; font-size: 11px; }
+
+    /* timeline */
+    .feed { position: relative; }
+    .feed::before { content: ""; position: absolute; left: 103px; top: 0; bottom: 0; width: 1px; background: var(--line); }
+    .row { position: relative; display: grid; grid-template-columns: 90px 26px minmax(0, 1fr); align-items: start; padding: 5px 0; animation: in .35s ease-out; }
+    @keyframes in { from { opacity: 0; transform: translateY(-6px); } }
+    .row.hidden { display: none; }
+    .time { font: 11px/26px var(--mono); color: var(--muted); text-align: right; padding-right: 4px; }
+    .node { width: 11px; height: 11px; border-radius: 50%; margin: 8px auto 0; background: var(--c); box-shadow: 0 0 0 3px var(--bg), 0 0 10px var(--c); position: relative; z-index: 1; }
+    .card {
+      background: var(--panel); border: 1px solid var(--line); border-left: 3px solid var(--c);
+      border-radius: 10px; padding: 7px 12px; cursor: pointer; min-width: 0;
+    }
+    .card:hover { background: var(--panel-2); }
+    .top { display: flex; align-items: center; gap: 10px; min-width: 0; }
+    .name { font: 600 12.5px var(--mono); color: var(--c); white-space: nowrap; }
+    .sum { display: flex; gap: 6px; flex-wrap: wrap; min-width: 0; flex: 1; }
+    .tag { font: 11.5px var(--mono); color: #c4c9d4; background: #1b202a; border-radius: 5px; padding: 1px 7px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+    .tag.bad { color: var(--red); background: rgba(248,113,113,.1); }
+    .tag.good { color: var(--green); background: rgba(52,211,153,.1); }
+    .tag.quote { white-space: normal; color: var(--text); }
+    .apill { font: 10.5px var(--mono); color: var(--ac); border: 1px solid var(--ac); border-radius: 5px; padding: 0 6px; white-space: nowrap; opacity: .9; }
+    .sess { font: 10.5px var(--mono); color: var(--dim); white-space: nowrap; }
+    .details { display: none; margin-top: 8px; border-top: 1px dashed var(--line); padding-top: 8px;
+      grid-template-columns: minmax(120px, max-content) 1fr; gap: 3px 14px; font: 11.5px var(--mono); }
+    .open .details { display: grid; }
+    .details .dk { color: var(--muted); }
+    .details .dv { color: var(--text); word-break: break-all; white-space: pre-wrap; }
+    .details .meta { color: var(--dim); }
+
+    .empty { text-align: center; color: var(--muted); padding: 60px 20px; border: 1px dashed var(--line); border-radius: 14px; }
+    .empty code { font-family: var(--mono); color: var(--text); background: var(--panel-2); padding: 2px 6px; border-radius: 5px; }
+
+    @media (max-width: 960px) {
+      .main { grid-template-columns: minmax(0, 1fr); }
+      .side { position: static; max-height: none; }
+    }
+    @media (max-width: 600px) {
+      .feed::before { left: 69px; }
+      .row { grid-template-columns: 58px 22px minmax(0, 1fr); }
+      .time { font-size: 10px; }
+      .time .ms, .sess { display: none; }
+      .top { flex-wrap: wrap; gap: 4px 6px; }
+      .name { flex-basis: 100%; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .row, .live .dot, .dot.live { animation: none; }
+    }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="logo">✳</div>
+    <h1>Claude Code · Live Events</h1>
+    <div id="status" class="status"><span class="dot"></span><span id="statusText">connecting…</span></div>
+    <div class="spacer"></div>
+    <button id="pauseBtn">Pause</button>
+    <button id="clearBtn">Clear</button>
+  </header>
+
+  <section class="stats">
+    <div class="stat"><div class="k">Events</div><div class="v" id="sEvents">0</div><div class="s" id="sTypes">0 types</div></div>
+    <div class="stat"><div class="k">Sessions</div><div class="v" id="sSessions">0</div><div class="s" id="sAgents">0 subagents</div></div>
+    <div class="stat"><div class="k">API calls</div><div class="v" id="sApi">0</div><div class="s" id="sApiErr">0 errors</div></div>
+    <div class="stat"><div class="k">Tokens</div><div class="v" id="sTokens">0</div><div class="s" id="sTokSplit">0 in · 0 out</div></div>
+    <div class="stat"><div class="k">Cost</div><div class="v" id="sCost">$0.00</div><div class="s" id="sCostAvg">— per call</div></div>
+    <div class="stat"><div class="k">Tool calls</div><div class="v" id="sTools">0</div><div class="s" id="sToolFail">0 failed</div></div>
+  </section>
+
+  <section class="activity">
+    <div class="k"><span>Activity · last 60s</span><span id="rate">0 / min</span></div>
+    <div class="bars" id="bars"></div>
+  </section>
+
+  <div class="main">
+    <aside class="side">
+      <div class="side-h"><span class="k">Sessions &amp; agents</span><button id="showAll" hidden>show all</button></div>
+      <div id="sessions"><div class="side-empty">No sessions yet</div></div>
+    </aside>
+
+    <section>
+      <div class="chips" id="chips"></div>
+      <div class="focus-banner" id="focusBanner">Showing <b id="focusLabel"></b><button id="focusClear">× clear</button></div>
+      <div id="empty" class="empty">
+        Waiting for events…<br><br>
+        Start <code>claude</code> in this project with telemetry enabled, or open <code>?demo</code> to preview.
+      </div>
+      <div class="feed" id="feed"></div>
+    </section>
+  </div>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const MAX_ROWS = 500;
+
+const COLORS = {
+  user_prompt: 'var(--violet)', api_request: 'var(--blue)', assistant_response: 'var(--teal)',
+  tool_result: 'var(--green)', tool_decision: 'var(--amber)', api_error: 'var(--red)', subagent_completed: 'var(--orange)',
+};
+const colorFor = (t) => COLORS[t] || (t.startsWith('hook') ? 'var(--slate)' : t.startsWith('mcp') || t.startsWith('plugin') ? 'var(--pink)' : 'var(--muted)');
+
+// stable colour per agent name
+const AGENT_COLORS = ['var(--orange)', 'var(--teal)', 'var(--pink)', 'var(--amber)', 'var(--blue)', 'var(--green)'];
+const agentColor = (name) => name === 'main' ? 'var(--violet)'
+  : AGENT_COLORS[[...name].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) >>> 0, 7) % AGENT_COLORS.length];
+
+// attributes present on every event: shown dimmed in details, never in the summary
+const isMeta = (k) => /^(anthropic\.|event\.|user\.|organization\.|session\.id|terminal\.type|prompt\.id|message\.uuid)/.test(k);
+
+// ---------- formatting ----------
+const num = (v) => Number(v) || 0;
+const k = (n) => n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? (n / 1e3).toFixed(1) + 'k' : String(Math.round(n));
+const money = (n) => '$' + (n < 0.01 && n > 0 ? n.toFixed(4) : n.toFixed(2));
+const dur = (v) => v == null ? null : num(v) >= 1000 ? (num(v) / 1000).toFixed(1) + 's' : Math.round(num(v)) + 'ms';
+const trunc = (s, n) => (s = String(s)).length > n ? s.slice(0, n) + '…' : s;
+const bool = (v) => v === true || v === 'true';
+const plural = (n, w) => n + ' ' + w + (n === 1 ? '' : 's');
+const ago = (t) => { const s = Math.max(0, (Date.now() - t) / 1000 | 0); return s < 60 ? s + 's ago' : s < 3600 ? (s / 60 | 0) + 'm ago' : (s / 3600 | 0) + 'h ago'; };
+
+function el(tag, cls, text) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text != null) e.textContent = text;
+  return e;
+}
+
+// ---------- identify session + agent of an event ----------
+// Subagent events carry agent_id; the name comes from agent.name / agent_type / query_source ("agent:builtin:<name>").
+const agentNames = {};
+function identify(e) {
+  const type = (e.name || 'unknown').replace(/^claude_code\./, '');
+  const a = e.attrs || {};
+  const qs = typeof a.query_source === 'string' && a.query_source.startsWith('agent:') ? a.query_source.split(':').pop() : null;
+  const name = a['agent.name'] || a.agent_type || qs;
+  let agent;
+  if (!a.agent_id && !name) agent = 'main';
+  else {
+    agent = a.agent_id || 'name:' + name;
+    if (name) agentNames[agent] = name;
+  }
+  const ts = a['event.timestamp'] ? new Date(a['event.timestamp']) : new Date(Number(e.time) / 1e6);
+  return { type, a, ts, session: a['session.id'] || 'unknown', agent, agentName: agent === 'main' ? 'main' : (agentNames[agent] || 'subagent') };
+}
+
+// per-type one-line summary as a list of [text, class]
+function summarize(type, a) {
+  const t = [];
+  const add = (v, cls = '') => v != null && v !== '' && t.push([String(v), cls]);
+  switch (type) {
+    case 'user_prompt':
+      if (a.prompt && a.prompt !== '<REDACTED>') add('“' + trunc(a.prompt, 160) + '”', 'quote');
+      else { add('redacted', 'bad'); add(num(a.prompt_length) + ' chars'); }
+      break;
+    case 'assistant_response':
+      if (a.response && a.response !== '<REDACTED>') add('“' + trunc(a.response, 160) + '”', 'quote');
+      else add('redacted', 'bad');
+      break;
+    case 'api_request':
+      add(a.model);
+      add(k(num(a.input_tokens)) + ' in'); add(k(num(a.output_tokens)) + ' out');
+      if (num(a.cache_read_tokens)) add(k(num(a.cache_read_tokens)) + ' cached');
+      if (a.cost_usd != null) add(money(num(a.cost_usd)));
+      add(dur(a.duration_ms));
+      break;
+    case 'api_error':
+      add(a.model); add(a.status_code, 'bad'); add(trunc(a.error || '', 80), 'bad');
+      break;
+    case 'tool_result':
+      add(a.tool_name);
+      if (a.tool_name === 'Agent' || a.tool_name === 'Task') { try { add(JSON.parse(a.tool_parameters).subagent_type); } catch {} }
+      if (a.success != null) bool(a.success) ? add('ok', 'good') : add('failed', 'bad');
+      add(dur(a.duration_ms));
+      if (a.error) add(trunc(a.error, 80), 'bad');
+      break;
+    case 'tool_decision':
+      add(a.tool_name); add(a.decision, a.decision === 'reject' ? 'bad' : 'good'); add(a.source);
+      break;
+    case 'subagent_completed':
+      add(a.agent_type); add(a['agent.source']); add(dur(a.duration_ms));
+      break;
+    default: // generic: first few interesting attributes
+      Object.entries(a).filter(([key]) => !isMeta(key) && key !== 'agent_id').slice(0, 4)
+        .forEach(([key, v]) => add(key + '=' + trunc(typeof v === 'object' ? JSON.stringify(v) : v, 40)));
+  }
+  return t;
+}
+
+// ---------- state ----------
+const newStats = () => ({ events: 0, prompts: 0, api: 0, apiErr: 0, tokIn: 0, tokOut: 0, cost: 0, tools: 0, toolFail: 0 });
+function bump(s, type, a) {
+  s.events++;
+  if (type === 'user_prompt') s.prompts++;
+  if (type === 'api_request') {
+    s.api++; s.tokIn += num(a.input_tokens) + num(a.cache_read_tokens) + num(a.cache_creation_tokens);
+    s.tokOut += num(a.output_tokens); s.cost += num(a.cost_usd);
+  }
+  if (type === 'api_error') s.apiErr++;
+  if (type === 'tool_result') { s.tools++; if (a.success != null && !bool(a.success)) s.toolFail++; }
+}
+
+let state, sessions, focus = null; // focus: {session, agent?}
+function reset() {
+  state = { stats: newStats(), types: {}, hidden: state ? state.hidden : new Set() };
+  sessions = new Map(); // sid -> {id, first, last, terminal, stats, agents: Map(key -> {key, name, stats, first, last, done})}
+  focus = null;
+}
+reset();
+let paused = false, buffer = [];
+const buckets = new Array(60).fill(0);
+
+function track(ev) {
+  const { type, a, ts, session, agent, agentName } = ev;
+  bump(state.stats, type, a);
+  state.types[type] = (state.types[type] || 0) + 1;
+
+  let s = sessions.get(session);
+  if (!s) sessions.set(session, s = { id: session, first: ts, last: ts, terminal: a['terminal.type'], stats: newStats(), agents: new Map() });
+  s.last = ts > s.last ? ts : s.last;
+  bump(s.stats, type, a);
+
+  let ag = s.agents.get(agent);
+  if (!ag) s.agents.set(agent, ag = { key: agent, name: agentName, stats: newStats(), first: ts, last: ts, done: false });
+  if (agentName !== 'subagent') ag.name = agentName; // name can arrive after the first event
+  ag.last = ts > ag.last ? ts : ag.last;
+  bump(ag.stats, type, a);
+  if (type === 'subagent_completed') ag.done = true;
+
+  buckets[59]++;
+}
+
+// ---------- rendering ----------
+function renderStats() {
+  const s = state.stats;
+  let subagents = 0;
+  sessions.forEach((x) => subagents += [...x.agents.keys()].filter((key) => key !== 'main').length);
+  $('sEvents').textContent = k(s.events);
+  $('sTypes').textContent = plural(Object.keys(state.types).length, 'type');
+  $('sSessions').textContent = sessions.size;
+  $('sAgents').textContent = plural(subagents, 'subagent');
+  $('sApi').textContent = s.api;
+  $('sApiErr').textContent = plural(s.apiErr, 'error');
+  $('sTokens').textContent = k(s.tokIn + s.tokOut);
+  $('sTokSplit').textContent = k(s.tokIn) + ' in · ' + k(s.tokOut) + ' out';
+  $('sCost').textContent = money(s.cost);
+  $('sCostAvg').textContent = s.api ? money(s.cost / s.api) + ' per call' : '— per call';
+  $('sTools').textContent = s.tools;
+  $('sToolFail').textContent = s.toolFail + ' failed';
+}
+
+function renderSessions() {
+  const box = $('sessions');
+  if (!sessions.size) { box.replaceChildren(el('div', 'side-empty', 'No sessions yet')); return; }
+  const cards = [...sessions.values()].sort((x, y) => y.last - x.last).map((s) => {
+    const card = el('div', 'sess-card' + (focus && focus.session === s.id && !focus.agent ? ' sel' : ''));
+    const top = el('div', 'sess-top');
+    const dot = el('span', 'dot' + (Date.now() - s.last < 60000 ? ' live' : ''));
+    top.append(dot, el('span', 'sess-id', s.id.slice(0, 8)), el('span', 'sess-term', s.terminal || ''), el('span', 'sess-ago', ago(s.last)));
+    top.onclick = () => setFocus({ session: s.id });
+
+    const m = el('div', 'sess-metrics');
+    const metric = (v, label) => { const x = el('span'); x.append(el('b', null, v), ' ' + label); m.append(x); };
+    const count = (n, w) => metric(n, plural(n, w).replace(/^\d+ /, ''));
+    count(s.stats.events, 'event'); count(s.stats.prompts, 'prompt'); metric(s.stats.api, 'api');
+    metric(k(s.stats.tokIn + s.stats.tokOut), 'tok'); metric(money(s.stats.cost), '');
+    if (s.stats.tools) count(s.stats.tools, 'tool');
+
+    const agents = el('div', 'agents');
+    const total = Math.max(1, s.stats.tokIn + s.stats.tokOut);
+    [...s.agents.values()].sort((x, y) => (x.key === 'main' ? -1 : y.key === 'main' ? 1 : x.first - y.first)).forEach((ag) => {
+      const row = el('div', 'agent' + (focus && focus.session === s.id && focus.agent === ag.key ? ' sel' : ''));
+      row.style.setProperty('--ac', agentColor(ag.name));
+      const an = el('div', 'an');
+      an.append(el('span', 'glyph', ag.key === 'main' ? '◆' : '⑂'), el('span', null, ag.name));
+      if (ag.done) an.append(el('span', 'done', '✓'));
+      const share = el('div', 'share'); const fill = el('i');
+      fill.style.width = ((ag.stats.tokIn + ag.stats.tokOut) / total * 100).toFixed(1) + '%';
+      share.append(fill);
+      const am = el('div', 'am');
+      am.append(el('b', null, k(ag.stats.tokIn + ag.stats.tokOut)), ' · ', el('b', null, money(ag.stats.cost)), ' · ' + ag.stats.api + ' api');
+      row.append(an, share, am);
+      row.title = `${ag.name}${ag.key !== 'main' ? ' (' + ag.key + ')' : ''}${ag.done ? ' · completed' : ''}\n` +
+        `${ag.stats.events} events · ${k(ag.stats.tokIn + ag.stats.tokOut)} tokens · ${ag.stats.tools} tool calls`;
+      row.onclick = () => setFocus({ session: s.id, agent: ag.key });
+      agents.append(row);
+    });
+    card.append(top, m, agents);
+    return card;
+  });
+  box.replaceChildren(...cards);
+}
+
+function renderChips() {
+  const box = $('chips');
+  box.replaceChildren();
+  Object.entries(state.types).sort((x, y) => y[1] - x[1]).forEach(([type, n]) => {
+    const c = el('span', 'chip' + (state.hidden.has(type) ? ' off' : ''));
+    const d = el('span', 'c'); d.style.background = colorFor(type);
+    c.append(d, el('span', null, type), el('span', 'n', n));
+    c.onclick = (ev) => {
+      if (ev.altKey || ev.metaKey) { // solo this type
+        const only = Object.keys(state.types).filter((x) => x !== type);
+        const isSolo = only.every((x) => state.hidden.has(x)) && !state.hidden.has(type);
+        state.hidden = new Set(isSolo ? [] : only);
+      } else {
+        state.hidden.has(type) ? state.hidden.delete(type) : state.hidden.add(type);
+      }
+      applyFilter(); renderChips();
+    };
+    box.append(c);
+  });
+}
+
+const visible = (d) => !state.hidden.has(d.type) && (!focus || (d.session === focus.session && (!focus.agent || d.agent === focus.agent)));
+function applyFilter() {
+  for (const r of $('feed').children) r.classList.toggle('hidden', !visible(r.dataset));
+}
+
+function setFocus(f) {
+  focus = f && focus && f.session === focus.session && f.agent === focus.agent ? null : f; // click again to clear
+  $('showAll').hidden = !focus;
+  $('focusBanner').classList.toggle('on', !!focus);
+  if (focus) {
+    const s = sessions.get(focus.session);
+    $('focusLabel').textContent = 'session ' + focus.session.slice(0, 8) + (focus.agent ? ' › ' + (s?.agents.get(focus.agent)?.name || focus.agent) : '');
+  }
+  applyFilter(); renderSessions();
+}
+$('showAll').onclick = $('focusClear').onclick = () => setFocus(null);
+
+function renderBars() {
+  const box = $('bars');
+  if (!box.children.length) for (let i = 0; i < 60; i++) box.append(el('i'));
+  const max = Math.max(1, ...buckets);
+  buckets.forEach((v, i) => {
+    const b = box.children[i];
+    b.style.height = Math.max(5, (v / max) * 100) + '%';
+    b.classList.toggle('hot', v > 0);
+  });
+  $('rate').textContent = buckets.reduce((s, v) => s + v, 0) + ' / min';
+}
+
+function addRow(ev) {
+  const { type, a, ts, session, agent } = ev;
+  const agentName = agent === 'main' ? 'main' : (agentNames[agent] || 'subagent');
+
+  const row = el('div', 'row');
+  Object.assign(row.dataset, { type, session, agent });
+  if (!visible(row.dataset)) row.classList.add('hidden');
+  row.style.setProperty('--c', type === 'tool_result' && a.success != null && !bool(a.success) ? 'var(--red)' : colorFor(type));
+
+  const time = el('div', 'time', ts.toLocaleTimeString([], { hour12: false }));
+  time.append(el('span', 'ms', '.' + String(ts.getMilliseconds()).padStart(3, '0')));
+  const card = el('div', 'card');
+  const top = el('div', 'top');
+  const sum = el('div', 'sum');
+  summarize(type, a).forEach(([text, cls]) => sum.append(el('span', 'tag ' + cls, text)));
+  top.append(el('span', 'name', type));
+  if (agent !== 'main') {
+    const p = el('span', 'apill', '⑂ ' + agentName);
+    p.style.setProperty('--ac', agentColor(agentName));
+    top.append(p);
+  }
+  top.append(sum, el('span', 'sess', session.slice(0, 8)));
+
+  const det = el('div', 'details');
+  Object.entries(a).sort(([x], [y]) => isMeta(x) - isMeta(y) || x.localeCompare(y)).forEach(([key, v]) => {
+    const m = isMeta(key) ? ' meta' : '';
+    det.append(el('span', 'dk' + m, key), el('span', 'dv' + m, typeof v === 'object' ? JSON.stringify(v, null, 2) : String(v)));
+  });
+
+  card.append(top, det);
+  card.onclick = () => card.classList.toggle('open');
+  row.append(time, el('div', 'node'), card);
+
+  const feed = $('feed');
+  feed.prepend(row);
+  while (feed.children.length > MAX_ROWS) feed.lastChild.remove();
+  $('empty').style.display = 'none';
+}
+
+// ---------- event intake (renders coalesced per frame) ----------
+let dirty = false;
+function scheduleRender() {
+  if (dirty) return;
+  dirty = true;
+  requestAnimationFrame(() => { dirty = false; renderStats(); renderChips(); renderBars(); renderSessions(); });
+}
+
+function handle(e) {
+  const ev = identify(e);
+  track(ev);
+  if (paused) { buffer.push(ev); $('pauseBtn').textContent = `Resume (${buffer.length})`; }
+  else addRow(ev);
+  scheduleRender();
+}
+
+setInterval(() => { buckets.shift(); buckets.push(0); renderBars(); renderSessions(); }, 1000);
+
+$('pauseBtn').onclick = () => {
+  paused = !paused;
+  $('pauseBtn').classList.toggle('on', paused);
+  $('pauseBtn').textContent = paused ? 'Resume (0)' : 'Pause';
+  if (!paused) { buffer.forEach(addRow); buffer = []; }
+};
+$('clearBtn').onclick = () => {
+  $('feed').replaceChildren(); buffer = [];
+  reset(); setFocus(null);
+  $('empty').style.display = '';
+  scheduleRender();
+};
+
+// ---------- server-sent events (EventSource reconnects on its own) ----------
+function connect() {
+  const es = new EventSource('/events');
+  const set = (cls, text) => { $('status').className = 'status ' + cls; $('statusText').textContent = text; };
+  es.onopen = () => set('live', 'live');
+  es.onerror = () => set('down', 'reconnecting…');
+  es.onmessage = (m) => handle(JSON.parse(m.data));
+}
+
+// ---------- demo mode: open /?demo to preview without Claude ----------
+function demo() {
+  const rnd = (n) => Math.random() * n | 0;
+  const pick = (xs) => xs[rnd(xs.length)];
+  const hex = () => Math.random().toString(16).slice(2, 12);
+  const sessionsDemo = [
+    { id: crypto.randomUUID(), term: 'ghostty', subs: [] },
+    { id: crypto.randomUUID(), term: 'vscode', subs: [] },
+  ];
+  const tools = ['Bash', 'Read', 'Edit', 'Grep', 'Write'];
+  const send = (s, name, attrs, agent) => handle({ name: 'claude_code.' + name, time: String(Date.now() * 1e6), attrs: {
+    'session.id': s.id, 'terminal.type': s.term, 'event.timestamp': new Date().toISOString(),
+    ...(agent ? { agent_id: agent.id } : {}), ...attrs } });
+  const apiReq = (s, agent) => send(s, 'api_request', { model: agent ? 'claude-haiku-5-5' : 'claude-opus-5-5',
+    input_tokens: 800 + rnd(1500), output_tokens: 60 + rnd(700), cache_read_tokens: 6000 + rnd(9000),
+    cost_usd: Math.random() * (agent ? 0.01 : 0.05), duration_ms: 600 + rnd(3000),
+    query_source: agent ? 'agent:builtin:' + agent.name : 'repl_main_thread', ...(agent ? { 'agent.name': agent.name } : {}) }, agent);
+  const toolRun = (s, agent) => { const ok = Math.random() > .12, t = pick(tools);
+    send(s, 'tool_decision', { tool_name: t, decision: 'accept', source: 'config' }, agent);
+    send(s, 'tool_result', { tool_name: t, success: ok, duration_ms: rnd(2500), ...(ok ? {} : { error: 'exit code 1' }) }, agent); };
+
+  const step = () => {
+    const s = Math.random() < .7 ? sessionsDemo[0] : sessionsDemo[1];
+    const live = s.subs.filter((x) => !x.done);
+    const r = Math.random();
+    if (r < .12) send(s, 'user_prompt', { prompt: pick(['add a websocket relay for claude code telemetry', 'aggregate events per session', 'why is the prompt redacted?']), prompt_length: 40 });
+    else if (r < .2 && live.length < 2) { // spawn a subagent
+      const ag = { id: 'a' + hex(), name: pick(['general-purpose', 'Explore', 'Plan']) };
+      s.subs.push(ag);
+      send(s, 'tool_decision', { tool_name: 'Agent', decision: 'accept', source: 'config' });
+      apiReq(s, ag);
+    } else if (r < .28 && live.length) { // finish a subagent
+      const ag = pick(live); ag.done = true;
+      send(s, 'subagent_completed', { agent_type: ag.name, 'agent.source': 'built-in' }, ag);
+      send(s, 'tool_result', { tool_name: 'Agent', success: true, duration_ms: 4000 + rnd(9000), tool_parameters: JSON.stringify({ subagent_type: ag.name }) });
+    } else {
+      const ag = live.length && Math.random() < .5 ? pick(live) : null;
+      Math.random() < .5 ? apiReq(s, ag) : toolRun(s, ag);
+      if (!ag && Math.random() < .3) send(s, 'assistant_response', { response: 'Done — the relay now forwards events.', response_length: 38 });
+    }
+    if (Math.random() < .03) send(s, 'api_error', { model: 'claude-opus-5-5', status_code: 529, error: 'overloaded_error' });
+  };
+  send(sessionsDemo[0], 'user_prompt', { prompt: 'add a websocket relay for claude code telemetry', prompt_length: 47 });
+  [['Explore', 0], ['general-purpose', 1]].forEach(([name, i]) => { // start with a subagent running in each session
+    const ag = { id: 'a' + hex(), name };
+    sessionsDemo[i].subs.push(ag);
+    apiReq(sessionsDemo[i], ag);
+  });
+  for (let n = 0; n < 24; n++) step(); // start with a populated feed
+  const tick = () => { step(); setTimeout(tick, 300 + Math.random() * 1300); };
+  setTimeout(tick, 1000);
+}
+
+renderStats(); renderBars();
+connect();
+if (new URLSearchParams(location.search).has('demo')) demo();
+</script>
+</body>
+</html>
